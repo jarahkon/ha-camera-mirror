@@ -160,9 +160,9 @@
     // ── Configuration ──────────────────────────────────────────
     const CONFIG = {
       noFaceTimeoutSec: 60,       // seconds without a face before auto-exit
-      detectionIntervalMs: 1000,  // how often to run face detection (ms)
-      motionThreshold: 15,        // pixel difference threshold for motion fallback
-      motionPixelRatio: 0.02,     // fraction of changed pixels to count as "presence"
+      detectionIntervalMs: 1000,  // how often to run detection (ms)
+      motionThreshold: 30,        // pixel diff threshold per channel (sum of RGB)
+      motionPixelRatio: 0.01,     // fraction of changed pixels to count as "presence"
       dashboardPath: '/lovelace/0', // path to return to
     };
 
@@ -174,12 +174,43 @@
 
     // ── State ──────────────────────────────────────────────────
     let stream = null;
-    let faceDetector = null;
-    let useFaceDetectorAPI = false;
     let detectionInterval = null;
+    let detectionRunning = false;
     let noFaceTimer = null;
     let secondsWithoutFace = 0;
     let previousFrame = null;
+    let fullyMotionWasEnabled = false;
+
+    // ── Fully Kiosk Browser Integration ────────────────────────
+    // Fully Kiosk uses the camera for its motion/face detection.
+    // We must disable it while the mirror is open to avoid conflicts,
+    // then re-enable it when the mirror exits.
+    function isFullyKiosk() {
+      return typeof fully !== 'undefined' && typeof fully.getBooleanSetting === 'function';
+    }
+
+    function disableFullyMotionDetection() {
+      if (!isFullyKiosk()) return;
+      try {
+        fullyMotionWasEnabled = fully.getBooleanSetting('motionDetection');
+        if (fullyMotionWasEnabled) {
+          fully.setBooleanSetting('motionDetection', false);
+          console.log('Disabled Fully Kiosk motion detection for mirror');
+        }
+      } catch (e) {
+        console.warn('Could not disable Fully Kiosk motion detection:', e);
+      }
+    }
+
+    function restoreFullyMotionDetection() {
+      if (!isFullyKiosk() || !fullyMotionWasEnabled) return;
+      try {
+        fully.setBooleanSetting('motionDetection', true);
+        console.log('Re-enabled Fully Kiosk motion detection');
+      } catch (e) {
+        console.warn('Could not restore Fully Kiosk motion detection:', e);
+      }
+    }
 
     // ── DOM References ─────────────────────────────────────────
     const video = document.getElementById('video');
@@ -197,6 +228,7 @@
         stream.getTracks().forEach(t => t.stop());
         stream = null;
       }
+      restoreFullyMotionDetection();
       // Navigate back — handle being inside an iframe (panel_iframe)
       try {
         const target = window.top !== window.self ? window.top : window;
@@ -233,15 +265,14 @@
           audio: false,
         });
         video.srcObject = stream;
+
         await video.play();
 
-        video.addEventListener('loadedmetadata', () => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-        });
-
         showStatus('Mirror active', 2000);
-        initFaceDetection();
+
+        if (!detectionRunning) {
+          startDetection();
+        }
       } catch (err) {
         console.error('Camera access failed:', err);
         const errorTitle = document.getElementById('error-title');
@@ -259,27 +290,33 @@
       }
     }
 
-    // ── Face Detection Setup ───────────────────────────────────
-    function initFaceDetection() {
-      if (typeof FaceDetector !== 'undefined') {
-        try {
-          faceDetector = new FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
-          useFaceDetectorAPI = true;
-        } catch (e) {
-          // FaceDetector not available, use motion fallback
-        }
-      }
-      startDetection();
-    }
+    // ── Motion Detection Constants ──────────────────────────
+    const MOTION_WIDTH = 160;
+    const MOTION_HEIGHT = 120;
 
     // ── Detection Loop ─────────────────────────────────────────
     function startDetection() {
-      detectionInterval = setInterval(runDetection, CONFIG.detectionIntervalMs);
+      detectionRunning = true;
+      scheduleDetection();
+    }
+
+    function scheduleDetection() {
+      detectionInterval = setTimeout(async () => {
+        try {
+          await runDetection();
+        } catch (e) {
+          console.warn('Detection cycle error:', e);
+        }
+        if (detectionRunning) {
+          scheduleDetection();
+        }
+      }, CONFIG.detectionIntervalMs);
     }
 
     function stopDetection() {
+      detectionRunning = false;
       if (detectionInterval) {
-        clearInterval(detectionInterval);
+        clearTimeout(detectionInterval);
         detectionInterval = null;
       }
       if (noFaceTimer) {
@@ -291,44 +328,46 @@
     async function runDetection() {
       if (!video.videoWidth || !video.videoHeight) return;
 
-      let facePresent = false;
-      if (useFaceDetectorAPI && faceDetector) {
-        facePresent = await detectWithFaceAPI();
-      } else {
-        facePresent = detectWithMotion(video);
+      // If video is paused, try to resume without restarting the camera
+      if (video.paused) {
+        video.play().catch(() => {});
+        return;
       }
-      updateFaceState(facePresent);
-    }
 
-    // ── Native FaceDetector ────────────────────────────────────
-    async function detectWithFaceAPI() {
+      let presenceDetected = true;
       try {
-        const faces = await faceDetector.detect(video);
-        return faces.length > 0;
+        // createImageBitmap is async and does NOT block the video decoder pipeline
+        // (unlike drawImage(video) which causes synchronous GPU readback and freezes)
+        const bitmap = await createImageBitmap(video,
+          0, 0, video.videoWidth, video.videoHeight,
+          { resizeWidth: MOTION_WIDTH, resizeHeight: MOTION_HEIGHT }
+        );
+        canvas.width = MOTION_WIDTH;
+        canvas.height = MOTION_HEIGHT;
+        ctx.drawImage(bitmap, 0, 0);
+        bitmap.close();
+
+        const currentFrame = ctx.getImageData(0, 0, MOTION_WIDTH, MOTION_HEIGHT);
+
+        if (!previousFrame) {
+          previousFrame = currentFrame;
+        } else {
+          presenceDetected = compareFrames(previousFrame, currentFrame);
+          previousFrame = currentFrame;
+        }
       } catch (e) {
-        useFaceDetectorAPI = false;
-        return true;
+        // If bitmap capture fails, assume someone is present
+        presenceDetected = true;
       }
+
+      updateFaceState(presenceDetected);
     }
 
-    // ── Motion Detection Fallback ──────────────────────────────
-    function detectWithMotion(source) {
-      const sampleWidth = 160;
-      const sampleHeight = 120;
-      canvas.width = sampleWidth;
-      canvas.height = sampleHeight;
-
-      ctx.drawImage(source, 0, 0, sampleWidth, sampleHeight);
-      const currentFrame = ctx.getImageData(0, 0, sampleWidth, sampleHeight);
-
-      if (!previousFrame) {
-        previousFrame = currentFrame;
-        return true;
-      }
-
-      const data1 = previousFrame.data;
-      const data2 = currentFrame.data;
-      const totalPixels = sampleWidth * sampleHeight;
+    // ── Motion Comparison ────────────────────────────────────────
+    function compareFrames(frame1, frame2) {
+      const data1 = frame1.data;
+      const data2 = frame2.data;
+      const totalPixels = MOTION_WIDTH * MOTION_HEIGHT;
       let changedPixels = 0;
 
       for (let i = 0; i < data1.length; i += 4) {
@@ -340,7 +379,6 @@
         }
       }
 
-      previousFrame = currentFrame;
       return (changedPixels / totalPixels) > CONFIG.motionPixelRatio;
     }
 
@@ -369,6 +407,8 @@
             }
 
             if (secondsWithoutFace >= CONFIG.noFaceTimeoutSec) {
+              clearInterval(noFaceTimer);
+              noFaceTimer = null;
               showStatus('No face detected — returning to dashboard');
               setTimeout(exitMirror, 1000);
             }
@@ -390,12 +430,17 @@
     }
 
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && !wakeLock) {
-        requestWakeLock();
+      if (document.visibilityState === 'visible') {
+        if (!wakeLock) requestWakeLock();
+        // Ensure video resumes after tab becomes visible again
+        if (video.paused && stream) {
+          video.play().catch(() => {});
+        }
       }
     });
 
     // ── Init ───────────────────────────────────────────────────
+    disableFullyMotionDetection();
     requestWakeLock();
     startCamera();
   </script>
