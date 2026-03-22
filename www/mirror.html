@@ -30,7 +30,6 @@
       display: none;
     }
 
-    /* Exit button */
     #exit-btn {
       position: fixed;
       top: 20px;
@@ -58,7 +57,6 @@
       background: rgba(220, 50, 50, 0.7);
     }
 
-    /* Status indicator */
     #status {
       position: fixed;
       bottom: 20px;
@@ -81,7 +79,6 @@
       opacity: 0.8;
     }
 
-    /* Face detection indicator */
     #face-indicator {
       position: fixed;
       top: 20px;
@@ -102,7 +99,6 @@
       background: #f44336;
     }
 
-    /* Error overlay */
     #error-overlay {
       display: none;
       position: fixed;
@@ -155,8 +151,8 @@
   <div id="status"></div>
 
   <div id="error-overlay">
-    <h2>Camera Access Required</h2>
-    <p>Please allow camera access in your browser settings to use the mirror feature.</p>
+    <h2 id="error-title">Camera Access Required</h2>
+    <p id="error-message">Please allow camera access in your browser settings to use the mirror feature.</p>
     <button onclick="exitMirror()">Back to Dashboard</button>
   </div>
 
@@ -201,15 +197,17 @@
         stream.getTracks().forEach(t => t.stop());
         stream = null;
       }
-
-      // Try Fully Kiosk Browser API first
-      if (typeof fully !== 'undefined' && typeof fully.loadStartUrl === 'function') {
-        fully.loadStartUrl();
-        return;
+      // Navigate back — handle being inside an iframe (panel_iframe)
+      try {
+        const target = window.top !== window.self ? window.top : window;
+        if (target.history.length > 1) {
+          target.history.back();
+        } else {
+          target.location.href = CONFIG.dashboardPath;
+        }
+      } catch (e) {
+        window.location.href = CONFIG.dashboardPath;
       }
-
-      // Navigate to dashboard
-      window.location.href = CONFIG.dashboardPath;
     }
 
     exitBtn.addEventListener('click', exitMirror);
@@ -237,7 +235,6 @@
         video.srcObject = stream;
         await video.play();
 
-        // Set canvas to match video dimensions
         video.addEventListener('loadedmetadata', () => {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
@@ -247,27 +244,31 @@
         initFaceDetection();
       } catch (err) {
         console.error('Camera access failed:', err);
+        const errorTitle = document.getElementById('error-title');
+        const errorMessage = document.getElementById('error-message');
+
+        if (!window.isSecureContext) {
+          errorTitle.textContent = 'HTTPS Required';
+          errorMessage.textContent = 'Camera access requires a secure (HTTPS) connection. Please enable HTTPS on your Home Assistant server.';
+        } else if (err.name === 'NotAllowedError') {
+          errorMessage.textContent = 'Camera permission was denied. Please allow camera access in your browser settings.';
+        } else if (err.name === 'NotFoundError') {
+          errorMessage.textContent = 'No camera found on this device.';
+        }
         errorOverlay.classList.add('visible');
       }
     }
 
     // ── Face Detection Setup ───────────────────────────────────
-    async function initFaceDetection() {
-      // Try native FaceDetector API (Chromium-based browsers)
+    function initFaceDetection() {
       if (typeof FaceDetector !== 'undefined') {
         try {
           faceDetector = new FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
           useFaceDetectorAPI = true;
-          console.log('Using native FaceDetector API');
         } catch (e) {
-          console.warn('FaceDetector init failed, falling back to motion detection');
+          // FaceDetector not available, use motion fallback
         }
       }
-
-      if (!useFaceDetectorAPI) {
-        console.log('Using motion detection fallback');
-      }
-
       startDetection();
     }
 
@@ -291,13 +292,11 @@
       if (!video.videoWidth || !video.videoHeight) return;
 
       let facePresent = false;
-
       if (useFaceDetectorAPI && faceDetector) {
         facePresent = await detectWithFaceAPI();
       } else {
-        facePresent = detectWithMotion();
+        facePresent = detectWithMotion(video);
       }
-
       updateFaceState(facePresent);
     }
 
@@ -307,27 +306,24 @@
         const faces = await faceDetector.detect(video);
         return faces.length > 0;
       } catch (e) {
-        console.warn('FaceDetector.detect() failed:', e);
-        // Fall back to motion detection for subsequent calls
         useFaceDetectorAPI = false;
-        return true; // Assume face present on error
+        return true;
       }
     }
 
     // ── Motion Detection Fallback ──────────────────────────────
-    function detectWithMotion() {
-      // Sample at a lower resolution for performance
+    function detectWithMotion(source) {
       const sampleWidth = 160;
       const sampleHeight = 120;
       canvas.width = sampleWidth;
       canvas.height = sampleHeight;
 
-      ctx.drawImage(video, 0, 0, sampleWidth, sampleHeight);
+      ctx.drawImage(source, 0, 0, sampleWidth, sampleHeight);
       const currentFrame = ctx.getImageData(0, 0, sampleWidth, sampleHeight);
 
       if (!previousFrame) {
         previousFrame = currentFrame;
-        return true; // Assume present on first frame
+        return true;
       }
 
       const data1 = previousFrame.data;
@@ -354,7 +350,6 @@
         secondsWithoutFace = 0;
         faceIndicator.className = 'detected';
 
-        // Clear no-face timer if running
         if (noFaceTimer) {
           clearInterval(noFaceTimer);
           noFaceTimer = null;
@@ -363,7 +358,6 @@
       } else {
         faceIndicator.className = 'no-face';
 
-        // Start countdown if not already running
         if (!noFaceTimer) {
           secondsWithoutFace = 0;
           noFaceTimer = setInterval(() => {
