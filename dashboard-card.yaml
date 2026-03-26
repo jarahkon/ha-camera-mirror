@@ -3,7 +3,7 @@ name: "\U0001FA9E Mirror"
 icon: mdi:mirror
 tap_action:
   action: url
-  url_path: /local/mirror.html
+  url_path: /camera_mirror/mirror.html
 show_name: true
 show_icon: true
 icon_height: 60px

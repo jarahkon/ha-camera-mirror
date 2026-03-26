@@ -1,0 +1,13 @@
+{
+    "config": {
+        "abort": {
+            "already_configured": "Camera Mirror is already configured."
+        },
+        "step": {
+            "user": {
+                "title": "Camera Mirror",
+                "description": "This will add a Mirror panel to your sidebar.\n\nClick Submit to install."
+            }
+        }
+    }
+}

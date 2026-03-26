@@ -1,0 +1,14 @@
+{
+    "domain": "camera_mirror",
+    "name": "Camera Mirror",
+    "codeowners": ["@jarahkon"],
+    "config_flow": true,
+    "dependencies": ["frontend", "http"],
+    "documentation": "https://github.com/jarahkon/ha-camera-mirror",
+    "integration_type": "service",
+    "iot_class": "local_push",
+    "issue_tracker": "https://github.com/jarahkon/ha-camera-mirror/issues",
+    "requirements": [],
+    "single_config_entry": true,
+    "version": "1.0.0"
+}
