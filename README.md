@@ -1,4 +1,4 @@
-# ha-tablet-mirror
+# ha-camera-mirror
 
 A self-contained mirror app for Home Assistant. Opens the device's front camera as a full-screen mirror with automatic motion detection — if no motion is detected for 60 seconds, it exits automatically.
 
