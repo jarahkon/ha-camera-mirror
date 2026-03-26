@@ -79,7 +79,7 @@
       opacity: 0.8;
     }
 
-    #face-indicator {
+    #presence-indicator {
       position: fixed;
       top: 20px;
       left: 20px;
@@ -91,11 +91,11 @@
       transition: background 0.3s;
     }
 
-    #face-indicator.detected {
+    #presence-indicator.detected {
       background: #4caf50;
     }
 
-    #face-indicator.no-face {
+    #presence-indicator.absent {
       background: #f44336;
     }
 
@@ -147,7 +147,7 @@
 
   <button id="exit-btn" title="Exit Mirror">✕</button>
 
-  <div id="face-indicator"></div>
+  <div id="presence-indicator"></div>
   <div id="status"></div>
 
   <div id="error-overlay">
@@ -159,7 +159,7 @@
   <script>
     // ── Configuration ──────────────────────────────────────────
     const CONFIG = {
-      noFaceTimeoutSec: 60,       // seconds without a face before auto-exit
+      inactivityTimeoutSec: 60,    // seconds without motion before auto-exit
       detectionIntervalMs: 1000,  // how often to run detection (ms)
       motionThreshold: 30,        // pixel diff threshold per channel (sum of RGB)
       motionPixelRatio: 0.01,     // fraction of changed pixels to count as "presence"
@@ -176,13 +176,13 @@
     let stream = null;
     let detectionInterval = null;
     let detectionRunning = false;
-    let noFaceTimer = null;
-    let secondsWithoutFace = 0;
+    let inactivityTimer = null;
+    let secondsInactive = 0;
     let previousFrame = null;
     let fullyMotionWasEnabled = false;
 
     // ── Fully Kiosk Browser Integration ────────────────────────
-    // Fully Kiosk uses the camera for its motion/face detection.
+    // Fully Kiosk uses the camera for its own motion detection.
     // We must disable it while the mirror is open to avoid conflicts,
     // then re-enable it when the mirror exits.
     function isFullyKiosk() {
@@ -218,7 +218,7 @@
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const exitBtn = document.getElementById('exit-btn');
     const statusEl = document.getElementById('status');
-    const faceIndicator = document.getElementById('face-indicator');
+    const presenceIndicator = document.getElementById('presence-indicator');
     const errorOverlay = document.getElementById('error-overlay');
 
     // ── Exit Function ──────────────────────────────────────────
@@ -319,9 +319,9 @@
         clearTimeout(detectionInterval);
         detectionInterval = null;
       }
-      if (noFaceTimer) {
-        clearInterval(noFaceTimer);
-        noFaceTimer = null;
+      if (inactivityTimer) {
+        clearInterval(inactivityTimer);
+        inactivityTimer = null;
       }
     }
 
@@ -360,7 +360,7 @@
         presenceDetected = true;
       }
 
-      updateFaceState(presenceDetected);
+      updatePresenceState(presenceDetected);
     }
 
     // ── Motion Comparison ────────────────────────────────────────
@@ -382,34 +382,34 @@
       return (changedPixels / totalPixels) > CONFIG.motionPixelRatio;
     }
 
-    // ── Face State Management ──────────────────────────────────
-    function updateFaceState(facePresent) {
-      if (facePresent) {
-        secondsWithoutFace = 0;
-        faceIndicator.className = 'detected';
+    // ── Presence State Management ───────────────────────────────
+    function updatePresenceState(detected) {
+      if (detected) {
+        secondsInactive = 0;
+        presenceIndicator.className = 'detected';
 
-        if (noFaceTimer) {
-          clearInterval(noFaceTimer);
-          noFaceTimer = null;
+        if (inactivityTimer) {
+          clearInterval(inactivityTimer);
+          inactivityTimer = null;
           statusEl.classList.remove('visible');
         }
       } else {
-        faceIndicator.className = 'no-face';
+        presenceIndicator.className = 'absent';
 
-        if (!noFaceTimer) {
-          secondsWithoutFace = 0;
-          noFaceTimer = setInterval(() => {
-            secondsWithoutFace++;
-            const remaining = CONFIG.noFaceTimeoutSec - secondsWithoutFace;
+        if (!inactivityTimer) {
+          secondsInactive = 0;
+          inactivityTimer = setInterval(() => {
+            secondsInactive++;
+            const remaining = CONFIG.inactivityTimeoutSec - secondsInactive;
 
             if (remaining <= 10 && remaining > 0) {
-              showStatus(`No face detected — closing in ${remaining}s`);
+              showStatus(`No motion detected — closing in ${remaining}s`);
             }
 
-            if (secondsWithoutFace >= CONFIG.noFaceTimeoutSec) {
-              clearInterval(noFaceTimer);
-              noFaceTimer = null;
-              showStatus('No face detected — returning to dashboard');
+            if (secondsInactive >= CONFIG.inactivityTimeoutSec) {
+              clearInterval(inactivityTimer);
+              inactivityTimer = null;
+              showStatus('No motion detected — returning to dashboard');
               setTimeout(exitMirror, 1000);
             }
           }, 1000);
