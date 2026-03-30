@@ -28,22 +28,38 @@ Works on any device (tablet, phone, PC) via standard `getUserMedia`. **Requires 
 
 ### Install via HACS (recommended)
 
-1. Open HACS in your Home Assistant
+Installation has **two parts**: first you download the files via HACS, then you activate the integration. Both steps are required.
+
+#### Part 1 — Download with HACS
+
+1. Open **HACS** in your Home Assistant sidebar
 2. Click the three dots menu (top right) → **Custom repositories**
-3. Add `https://github.com/jarahkon/ha-camera-mirror` with category **Integration**
-4. Search for "Camera Mirror" in HACS and click **Download**
-5. **Restart Home Assistant**
-6. Go to **Settings → Devices & Services → Add Integration → Camera Mirror**
-7. Click **Submit** — "Mirror" appears in your sidebar
+3. Paste `https://github.com/jarahkon/ha-camera-mirror` and select category **Integration** → click **Add**
+4. Search for **"Camera Mirror"** in HACS and click **Download**
+5. **Restart Home Assistant** (Settings → System → Restart)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jarahkon&repository=ha-camera-mirror&category=integration)
+
+#### Part 2 — Activate the integration
+
+> **Important:** Downloading in HACS only copies the files — it does **not** activate the integration or add anything to your sidebar. You must complete this step.
+
+6. Go to **Settings → Devices & Services**
+7. Click the **"+ Add Integration"** button (bottom-right corner)
+8. Search for **"Camera Mirror"** and select it
+9. Click **Submit**
+10. **"Mirror" now appears in your sidebar** — you're done!
+
+> **Common mistake:** After downloading in HACS, you may see a "Camera Mirror" device under Devices — that is HACS tracking the download, not the integration being active. You still need to click "+ Add Integration" to activate it.
 
 ### Manual Installation
 
 1. Copy the `custom_components/camera_mirror` directory to your Home Assistant's `custom_components/` folder
-2. **Restart Home Assistant**
-3. Go to **Settings → Devices & Services → Add Integration → Camera Mirror**
-4. Click **Submit** — "Mirror" appears in your sidebar
+2. **Restart Home Assistant** (Settings → System → Restart)
+3. Go to **Settings → Devices & Services**
+4. Click the **"+ Add Integration"** button (bottom-right corner)
+5. Search for **"Camera Mirror"** and select it
+6. Click **Submit** — **"Mirror" now appears in your sidebar**
 
 ### Browser Configuration
 
@@ -103,8 +119,9 @@ If you also want a button card on a dashboard to open the mirror, you can use th
 - Increase `inactivityTimeoutSec` in the CONFIG section of `mirror.html`
 
 ### Mirror doesn't appear in sidebar
-- Make sure you added the integration via **Settings → Devices & Services → Add Integration → Camera Mirror**
-- Restart Home Assistant if needed
+- **Most common cause:** The integration was downloaded via HACS but not activated. Downloading in HACS only copies files — you must also go to **Settings → Devices & Services → + Add Integration → Camera Mirror → Submit** to activate it.
+- If you see "Camera Mirror" under Devices but not in the sidebar, that's the HACS device entry, not the active integration. Follow Part 2 of the installation steps above.
+- If Camera Mirror doesn't appear in the "Add Integration" search, restart Home Assistant and try again.
 
 ## File Structure
 
