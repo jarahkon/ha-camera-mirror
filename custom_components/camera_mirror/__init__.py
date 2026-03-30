@@ -44,7 +44,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    hass.data.pop(DOMAIN, None)
+    """Unload a config entry.
+
+    Note: hass.data[DOMAIN] is intentionally kept so the static path
+    (which cannot be removed from aiohttp) is not re-registered on reload.
+    """
     async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
     return True
