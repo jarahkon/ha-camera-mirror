@@ -37,6 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         frontend_url_path=PANEL_URL_PATH,
         require_admin=False,
         config={"url": f"{URL_BASE}/{MIRROR_FILE}"},
+        update=True,
     )
 
     return True
@@ -45,6 +46,5 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     hass.data.pop(DOMAIN, None)
-    if hass.data.get("frontend_panels", {}).get(PANEL_URL_PATH):
-        async_remove_panel(hass, PANEL_URL_PATH)
+    async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
     return True
