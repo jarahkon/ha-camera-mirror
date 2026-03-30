@@ -138,7 +138,6 @@ custom_components/
       en.json          # English translations
     brand/
       icon.png         # Integration icon
-      logo.png         # Integration logo
 hacs.json              # HACS repository manifest
 dashboard-card.yaml    # Optional: button card with card_mod styling
 dashboard-card-simple.yaml  # Optional: simple button card
